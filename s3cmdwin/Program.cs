@@ -34,15 +34,23 @@ Where
 				string bucketName = args[2];
 
 				var credentials = new Amazon.Runtime.BasicAWSCredentials(iamLogin, iamPassword);
-				var client = new AmazonS3Client(credentials, Amazon.RegionEndpoint.GetBySystemName(regionName));
+				var config = new AmazonS3Config() { UseHttp = true, RegionEndpoint = Amazon.RegionEndpoint.GetBySystemName(regionName) };
+				var client = new AmazonS3Client(credentials, config);
 
 				if (args.Length > 3) //store file
 				{
 					string filename = args[3];
-					var fileTransferUtility = new Amazon.S3.Transfer.TransferUtility(client);
+
+					//limit to 1 concurrent request to ease on CPU with big files
+					//also set chunksize to 5GB (max allowed) to lower S3 costs, otherwise it splits into too many requests, a 20GB file will be THOUSANDS requests
+					var transferConfig = new Amazon.S3.Transfer.TransferUtilityConfig()
+					{
+						ConcurrentServiceRequests = 1, //limit to 1 concurrent request to ease on CPU with big files
+						MinSizeBeforePartUpload = 5000000000 //5GB. yes i know 5GB is actually 5368709120, just in case SDK packs more reserved info into the PUT request (headers, etc)
+					};
+					var fileTransferUtility = new Amazon.S3.Transfer.TransferUtility(client, transferConfig);
 					fileTransferUtility.Upload(filename, bucketName);
 					Console.WriteLine($"Upload completed");
-					return;
 				}
 				else //list files in the bucket
 				{
